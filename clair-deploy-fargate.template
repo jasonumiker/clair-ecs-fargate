@@ -1,0 +1,385 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Outputs": {
+        "ClairURL": {
+            "Description": "URL of the ALB",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "ClairALB",
+                                "DNSName"
+                            ]
+                        }
+                    ]
+                ]
+            }
+        }
+    },
+    "Parameters": {
+        "ClairDBPassword": {
+            "Description": "The initial Clair RDS Password.",
+            "NoEcho": true,
+            "Type": "String"
+        },
+        "ClairImage": {
+            "Default": "jasonumiker/clair:latest",
+            "Description": "The Clair container image to deploy.",
+            "Type": "String"
+        },
+        "ClairSubnet": {
+            "Description": "A VPC subnet ID for the container.",
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "ClairSubnet2": {
+            "Description": "A 2nd VPC subnet ID for the container.",
+            "Type": "AWS::EC2::Subnet::Id"
+        },
+        "ClairVPC": {
+            "Description": "A VPC ID for the container.",
+            "Type": "AWS::EC2::VPC::Id"
+        },
+        "Cluster": {
+            "Description": "The ECS Cluster to deploy to.",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "ALBSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Clair ALB Security Group",
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": "6060",
+                        "IpProtocol": "tcp",
+                        "ToPort": "6061"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "ClairVPC"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "ClairALB": {
+            "Properties": {
+                "Scheme": "internal",
+                "SecurityGroups": [
+                    {
+                        "Ref": "ALBSecurityGroup"
+                    }
+                ],
+                "Subnets": [
+                    {
+                        "Ref": "ClairSubnet"
+                    },
+                    {
+                        "Ref": "ClairSubnet2"
+                    }
+                ]
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer"
+        },
+        "ClairDB": {
+            "Properties": {
+                "AllocatedStorage": "20",
+                "DBInstanceClass": "db.t2.micro",
+                "DBName": "postgres",
+                "DBSubnetGroupName": {
+                    "Ref": "DBSubnetGroup"
+                },
+                "Engine": "postgres",
+                "EngineVersion": "10.3",
+                "MasterUserPassword": {
+                    "Ref": "ClairDBPassword"
+                },
+                "MasterUsername": "postgres",
+                "MultiAZ": "false",
+                "StorageType": "gp2",
+                "VPCSecurityGroups": [
+                    {
+                        "Ref": "DBSecurityGroup"
+                    }
+                ]
+            },
+            "Type": "AWS::RDS::DBInstance"
+        },
+        "ClairHostSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Clair ECS Security Group.",
+                "SecurityGroupIngress": [
+                    {
+                        "FromPort": "6060",
+                        "IpProtocol": "tcp",
+                        "SourceSecurityGroupId": {
+                            "Fn::GetAtt": [
+                                "ALBSecurityGroup",
+                                "GroupId"
+                            ]
+                        },
+                        "ToPort": "6061"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "ClairVPC"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "ClairLogGroup": {
+            "Type": "AWS::Logs::LogGroup"
+        },
+        "ClairService": {
+            "DependsOn": "ClairALB",
+            "Properties": {
+                "Cluster": {
+                    "Ref": "Cluster"
+                },
+                "DesiredCount": 1,
+                "LaunchType": "FARGATE",
+                "LoadBalancers": [
+                    {
+                        "ContainerName": "clair",
+                        "ContainerPort": 6060,
+                        "TargetGroupArn": {
+                            "Ref": "ClairTargetGroup"
+                        }
+                    }
+                ],
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "SecurityGroups": [
+                            {
+                                "Ref": "ClairHostSecurityGroup"
+                            }
+                        ],
+                        "Subnets": [
+                            {
+                                "Ref": "ClairSubnet"
+                            },
+                            {
+                                "Ref": "ClairSubnet2"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "ClairTaskDefinition"
+                }
+            },
+            "Type": "AWS::ECS::Service"
+        },
+        "ClairTargetGroup": {
+            "Properties": {
+                "HealthCheckIntervalSeconds": "30",
+                "HealthCheckPath": "/health",
+                "HealthCheckPort": "6061",
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": "10",
+                "HealthyThresholdCount": "4",
+                "Matcher": {
+                    "HttpCode": "200"
+                },
+                "Port": "6060",
+                "Protocol": "HTTP",
+                "TargetType": "ip",
+                "UnhealthyThresholdCount": "3",
+                "VpcId": {
+                    "Ref": "ClairVPC"
+                }
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup"
+        },
+        "ClairTaskDefinition": {
+            "Properties": {
+                "ContainerDefinitions": [
+                    {
+                        "Environment": [
+                            {
+                                "Name": "DB_HOST",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "ClairDB",
+                                        "Endpoint.Address"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "DB_PASSWORD",
+                                "Value": {
+                                    "Ref": "ClairDBPassword"
+                                }
+                            }
+                        ],
+                        "Essential": "true",
+                        "Image": {
+                            "Ref": "ClairImage"
+                        },
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group": {
+                                    "Ref": "ClairLogGroup"
+                                },
+                                "awslogs-region": {
+                                    "Ref": "AWS::Region"
+                                },
+                                "awslogs-stream-prefix": "clair"
+                            }
+                        },
+                        "Name": "clair",
+                        "PortMappings": [
+                            {
+                                "ContainerPort": 6060
+                            },
+                            {
+                                "ContainerPort": 6061
+                            }
+                        ]
+                    }
+                ],
+                "Cpu": "512",
+                "ExecutionRoleArn": {
+                    "Ref": "TaskExecutionRole"
+                },
+                "Memory": "1GB",
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "TaskRoleArn": {
+                    "Ref": "TaskRole"
+                }
+            },
+            "Type": "AWS::ECS::TaskDefinition"
+        },
+        "DBSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Security group for RDS DB Instance.",
+                "SecurityGroupIngress": [
+                    {
+                        "FromPort": "5432",
+                        "IpProtocol": "tcp",
+                        "SourceSecurityGroupId": {
+                            "Fn::GetAtt": [
+                                "ClairHostSecurityGroup",
+                                "GroupId"
+                            ]
+                        },
+                        "ToPort": "5432"
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "ClairVPC"
+                }
+            },
+            "Type": "AWS::EC2::SecurityGroup"
+        },
+        "DBSubnetGroup": {
+            "Properties": {
+                "DBSubnetGroupDescription": "Subnets available for the RDS DB Instance",
+                "SubnetIds": [
+                    {
+                        "Ref": "ClairSubnet"
+                    },
+                    {
+                        "Ref": "ClairSubnet2"
+                    }
+                ]
+            },
+            "Type": "AWS::RDS::DBSubnetGroup"
+        },
+        "FargateExecutionPolicy": {
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "ecr:GetAuthorizationToken",
+                                "ecr:BatchCheckLayerAvailability",
+                                "ecr:GetDownloadUrlForLayer",
+                                "ecr:BatchGetImage",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                "*"
+                            ]
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "PolicyName": "fargate-execution",
+                "Roles": [
+                    {
+                        "Ref": "TaskExecutionRole"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Policy"
+        },
+        "Listener": {
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "TargetGroupArn": {
+                            "Ref": "ClairTargetGroup"
+                        },
+                        "Type": "forward"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "ClairALB"
+                },
+                "Port": "6060",
+                "Protocol": "HTTP"
+            },
+            "Type": "AWS::ElasticLoadBalancingV2::Listener"
+        },
+        "TaskExecutionRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "TaskRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "Type": "AWS::IAM::Role"
+        }
+    }
+}
