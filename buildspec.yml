@@ -26,6 +26,6 @@ phases:
       - bash -c "if [ /"$CODEBUILD_BUILD_SUCCEEDING/" == /"0/" ]; then exit 1; fi"
       - echo Build stage successfully completed on `date`
       - docker push $IMAGE_URI
-      - printf '[{"name":"clair","imageUri":"%s"}]' "$IMAGE_URI" > ../images.json
+      - printf '[{"name":"clair","imageUri":"%s"}]' "$IMAGE_URI" > images.json
 artifacts:
   files: images.json
