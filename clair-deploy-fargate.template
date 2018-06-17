@@ -93,7 +93,7 @@
                     "Ref": "DBSubnetGroup"
                 },
                 "Engine": "postgres",
-                "EngineVersion": "10.3",
+                "EngineVersion": "9.6.8",
                 "MasterUserPassword": {
                     "Ref": "ClairDBPassword"
                 },
