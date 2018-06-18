@@ -7,8 +7,8 @@ I use it in conjunction with a commandline tool called Klar (https://github.com/
     wget https://github.com/optiopay/klar/releases/download/v2.1.1/klar-2.1.1-linux-amd64
     chmod +x ./klar-2.1.1-linux-amd64
     DOCKER_LOGIN=`aws ecr get-login --region $AWS_DEFAULT_REGION`
-    DOCKER_PASSWORD=`echo $DOCKER_LOGIN | cut -d' ' -f6`
-    DOCKER_USER=AWS CLAIR_ADDR=$CLAIR_URL ./klar-2.1.1-linux-amd64 $IMAGE_URI
+    PASSWORD=`echo $DOCKER_LOGIN | cut -d' ' -f6`
+    DOCKER_USER=AWS DOCKER_PASSWORD=${PASSWORD} CLAIR_ADDR=$CLAIR_URL ../klar $IMAGE_URI
 
 ## Why do we need to build our own image?
 One minor change was required to the upstream CoreOS Clair (https://github.com/coreos/clair) Docker image to get it to run in Fargate. Clair doesn't take options like the configuration of its database via environment variables but from a config file - and there is not a capability currently to mount that into the container at runtime in ECS Fargate. 
