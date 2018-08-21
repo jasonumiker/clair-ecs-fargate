@@ -4,11 +4,12 @@ The Clair image scanner service from CoreOS (https://github.com/coreos/clair) ca
 I use it in conjunction with a commandline tool called Klar (https://github.com/optiopay/klar) which I invoke as the last step of a CodeBuild to ask Clair to scan the new image once it has been pushed to the Elastic Container Registry (ECR). An example of how to do that is here - https://github.com/jasonumiker/ghost-ecs-fargate/blob/master/ghost-container/buildspec_clair.yml
 
 ## Example of using klar to invoke clair on an image in ECR in your CodeBuild
-    wget https://github.com/optiopay/klar/releases/download/v2.1.1/klar-2.1.1-linux-amd64
-    chmod +x ./klar-2.1.1-linux-amd64
+    wget https://github.com/optiopay/klar/releases/download/v2.3.0/klar-2.3.0-linux-amd64
+    chmod +x ./klar-2.3.0-linux-amd64
+    mv ./klar-2.3.0-linux-amd64 ./klar
     DOCKER_LOGIN=`aws ecr get-login --region $AWS_DEFAULT_REGION`
     PASSWORD=`echo $DOCKER_LOGIN | cut -d' ' -f6`
-    DOCKER_USER=AWS DOCKER_PASSWORD=${PASSWORD} CLAIR_ADDR=$CLAIR_URL ../klar $IMAGE_URI
+    DOCKER_USER=AWS DOCKER_PASSWORD=${PASSWORD} CLAIR_ADDR=$CLAIR_URL ./klar $IMAGE_URI
 
 ## Why do we need to build our own image?
 One minor change was required to the upstream CoreOS Clair (https://github.com/coreos/clair) Docker image to get it to run in Fargate. Clair doesn't take options like the configuration of its database via environment variables but from a config file - and there is not a capability currently to mount that into the container at runtime in ECS Fargate. 
