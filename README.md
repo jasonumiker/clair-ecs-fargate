@@ -1,7 +1,7 @@
 # Clair running on AWS ECS Fargate
 The Clair image scanner service from CoreOS (https://github.com/coreos/clair) can be used to scan a particular Docker image for known vulnerabilities as part of your build or deployment pipeline. This project is to package and deploy the scanner in a way that can run on AWS ECS via Fargate.
 
-I use it in conjunction with a commandline tool called Klar (https://github.com/optiopay/klar) which I invoke as the last step of a CodeBuild to ask Clair to scan the new image once it has been pushed to the Elastic Container Registry (ECR). An example of how to do that is here - https://github.com/jasonumiker/ghost-ecs-fargate/blob/master/ghost-container/buildspec_clair.yml
+I use it in conjunction with a commandline tool called Klar (https://github.com/optiopay/klar) which I invoke as the last step of a CodeBuild to ask Clair to scan the new image once it has been pushed to the Elastic Container Registry (ECR). An example of how to do that is here - https://github.com/jasonumiker/ghost-ecs-fargate-pipeline/blob/master/ghost-container/buildspec.yml
 
 ## Example of using klar to invoke clair on an image in ECR in your CodeBuild
     wget https://github.com/optiopay/klar/releases/download/v2.3.0/klar-2.3.0-linux-amd64
